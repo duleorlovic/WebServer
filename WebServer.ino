@@ -1,40 +1,35 @@
 /*
   Web Server
 
- A simple web server that shows the value of the analog input pins.
- using an Arduino Wiznet Ethernet shield.
-
  Circuit:
- * Ethernet shield attached to pins 10, 11, 12, 13
+ * Ethernet shield attached to pins 10, 11, 12, 13, so can not use them as IO
  * Analog inputs attached to pins A0 through A5 (optional)
-
- created 18 Dec 2009
- by David A. Mellis
- modified 9 Apr 2012
- by Tom Igoe
- modified 02 Sept 2015
- by Arturo Guadalupi
-
  */
+
 
 #include <SPI.h>
 #include <Ethernet.h>
+
+#define RELAY_PIN 2
 
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network:
 byte mac[] = {
   0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
 };
-IPAddress ip(192, 168, 1, 177);
+IPAddress ip(192, 168, 2, 17);
 
 // Initialize the Ethernet server library
 // with the IP address and port you want to use
 // (port 80 is default for HTTP):
 EthernetServer server(80);
 
+String readString;
+
 void setup() {
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
+  pinMode(RELAY_PIN, OUTPUT);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
@@ -47,6 +42,48 @@ void setup() {
   Serial.println(Ethernet.localIP());
 }
 
+void processRequest(EthernetClient client) {
+  boolean refresh = false;
+  if (readString.indexOf("submit=On") > 0) {
+    digitalWrite(RELAY_PIN, HIGH);
+    refresh = true;
+  }
+  if (readString.indexOf("submit=Off") > 0) {
+    digitalWrite(RELAY_PIN, LOW);
+    refresh = true;
+  }
+  // send a standard http response header
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: text/html");
+  client.println("Connection: close");  // the connection will be closed after completion of the response
+  // client.println("Refresh: 5");  // refresh the page automatically every 5 sec
+  client.println();
+  client.println("<!DOCTYPE HTML>");
+  client.println("<html>");
+  client.println("<head>");
+  if (refresh) {
+    client.println("<meta http-equiv='refresh' content=\"0; URL='/'\" />");
+  }
+  client.println("<style>");
+  client.println(".red { color: red } .green { color: green };");
+  client.println("</style>");
+  client.println("</head>");
+  client.println("<h1><a href='/'>Relay Home</a></h1>");
+  if (refresh) {
+    client.println(readString);
+  }
+  if (digitalRead(RELAY_PIN) == HIGH) {
+    client.println("Pin is ON");
+  } else {
+    client.println("Pin is OFF");
+  }
+  client.println("<form ACTION=\"/\" method=get >");
+  client.println("<input type=submit name=\"submit\" value=\"On\" class='green'>");
+  client.println("<input type=submit name=\"submit\" value=\"Off \" class='red'>");
+  client.println("</form>");
+  client.println("<br />");
+  client.println("</html>");
+}
 
 void loop() {
   // listen for incoming clients
@@ -58,29 +95,21 @@ void loop() {
     while (client.connected()) {
       if (client.available()) {
         char c = client.read();
-        Serial.write(c);
+        //read char by char HTTP request
+        if (readString.length() < 100) {
+
+          //store characters to string
+          readString += c;
+          Serial.print(c); //print what server receives to serial monitor
+        } else {
+          Serial.write(c);
+        }
         // if you've gotten to the end of the line (received a newline
         // character) and the line is blank, the http request has ended,
         // so you can send a reply
         if (c == '\n' && currentLineIsBlank) {
-          // send a standard http response header
-          client.println("HTTP/1.1 200 OK");
-          client.println("Content-Type: text/html");
-          client.println("Connection: close");  // the connection will be closed after completion of the response
-          client.println("Refresh: 5");  // refresh the page automatically every 5 sec
-          client.println();
-          client.println("<!DOCTYPE HTML>");
-          client.println("<html>");
-          // output the value of each analog input pin
-          for (int analogChannel = 0; analogChannel < 6; analogChannel++) {
-            int sensorReading = analogRead(analogChannel);
-            client.print("analog input ");
-            client.print(analogChannel);
-            client.print(" is ");
-            client.print(sensorReading);
-            client.println("<br />");
-          }
-          client.println("</html>");
+          processRequest(client);
+          readString = "";
           break;
         }
         if (c == '\n') {

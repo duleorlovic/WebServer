@@ -1,0 +1,17 @@
+# WebServer
+
+Web server on Arduino that controlls relay
+
+# Make
+
+```
+make upload monitor
+```
+
+Test with
+
+```
+curl 192.168.2.17/
+curl 192.168.2.17/?submit=On
+
+```
